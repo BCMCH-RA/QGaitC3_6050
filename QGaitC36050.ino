@@ -5,6 +5,9 @@ GaitIMU v12 — ESP32-C3 + MPU6050
 Target:
   ESP32-C3 + MPU6050 over I2C
 
+Compatible with:
+  ESP32 Arduino core 3.x BLE library
+
 Implements:
   Option A: up to 8 samples per BLE packet
   Option B: binary int16 IMU samples
@@ -66,7 +69,6 @@ Notes:
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include <esp_gatt_defs.h>
 
 #include <string.h>
 
@@ -91,13 +93,13 @@ Notes:
 #define I2C_SCL 9
 
 /* Sampling / packetisation */
-#define SAMPLE_RATE_HZ           200
-#define SAMPLE_PERIOD_MS         (1000 / SAMPLE_RATE_HZ)
-#define MAX_SAMPLES_PER_PACKET   8
+#define SAMPLE_RATE_HZ             200
+#define SAMPLE_PERIOD_MS           (1000 / SAMPLE_RATE_HZ)
+#define MAX_SAMPLES_PER_PACKET     8
 #define DEFAULT_SAMPLES_PER_PACKET 8
 
-#define HEADER_LEN               13
-#define MAX_PACKET_LEN           (HEADER_LEN + 12 * MAX_SAMPLES_PER_PACKET)
+#define HEADER_LEN                 13
+#define MAX_PACKET_LEN             (HEADER_LEN + 12 * MAX_SAMPLES_PER_PACKET)
 
 /* BLE UUIDs — must match index.html */
 #define GAIT_SERVICE_UUID "9f000001-8c5a-4e1f-9a7b-3d6e5f0a1b2c"
@@ -202,6 +204,7 @@ static uint8_t readReg(uint8_t reg) {
 static bool detectMPU(uint8_t addr) {
   Wire.beginTransmission(addr);
   Wire.write(MPU_REG_WHO_AM_I);
+
   if (Wire.endTransmission(false) != 0) {
     return false;
   }
@@ -374,6 +377,7 @@ static void addSample(uint32_t sampleMs) {
     return;
   }
 
+  bool errorFlag = lastReadError;
   lastReadError = false;
 
   if (packetFill == 0) {
@@ -385,7 +389,7 @@ static void addSample(uint32_t sampleMs) {
       packetFlags |= 0x01;
     }
 
-    if (lastReadError) {
+    if (errorFlag) {
       packetFlags |= 0x02;
     }
 
@@ -413,6 +417,7 @@ static void addSample(uint32_t sampleMs) {
    ═══════════════════════════════════════════════════════════════ */
 
 class ServerCallbacks : public BLEServerCallbacks {
+public:
   void onConnect(BLEServer* server) {
     bleConnected = true;
     Serial.println("[BLE] central connected");
@@ -429,15 +434,19 @@ class ServerCallbacks : public BLEServerCallbacks {
 };
 
 class CmdCallbacks : public BLECharacteristicCallbacks {
+public:
   void onWrite(BLECharacteristic* pCharacteristic) {
-    std::string v = pCharacteristic->getValue();
+    String v = pCharacteristic->getValue();
+    size_t len = v.length();
 
-    if (v.length() < 1) {
+    if (len < 1) {
       return;
     }
 
-    uint8_t b0 = (uint8_t)v[0];
-    uint8_t b1 = (v.length() > 1) ? (uint8_t)v[1] : 0;
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(v.c_str());
+
+    uint8_t b0 = data[0];
+    uint8_t b1 = (len > 1) ? data[1] : 0;
 
     if (b0 == CMD_START) {
       pendingStart = true;
@@ -451,20 +460,22 @@ class CmdCallbacks : public BLECharacteristicCallbacks {
 };
 
 class TimeCallbacks : public BLECharacteristicCallbacks {
+public:
   void onWrite(BLECharacteristic* pCharacteristic) {
-    std::string v = pCharacteristic->getValue();
+    String v = pCharacteristic->getValue();
+    size_t len = v.length();
 
-    if (v.length() < 6) {
+    if (len < 6) {
       return;
     }
 
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(v.data());
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(v.c_str());
 
     uint32_t sec = 0;
     uint16_t ms = 0;
 
-    memcpy(&sec, &p[0], 4);
-    memcpy(&ms, &p[4], 2);
+    memcpy(&sec, &data[0], 4);
+    memcpy(&ms, &data[4], 2);
 
     syncUnixMs = ((uint64_t)sec * 1000ULL) + (uint64_t)ms;
     syncDeviceMs = millis();
@@ -523,7 +534,8 @@ void setup() {
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new ServerCallbacks());
 
-  pService = pServer->createService(BLEUUID(GAIT_SERVICE_UUID));
+  BLEUUID serviceUUID(GAIT_SERVICE_UUID);
+  pService = pServer->createService(serviceUUID);
 
   cmdChar = pService->createCharacteristic(
     BLEUUID(CMD_CHAR_UUID),
@@ -547,17 +559,15 @@ void setup() {
 
   /* CCC descriptors for notifications */
   BLE2902* timeDesc = new BLE2902();
-  timeDesc->setAccessPermissions(ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE);
   timeChar->addDescriptor(timeDesc);
 
   BLE2902* dataDesc = new BLE2902();
-  dataDesc->setAccessPermissions(ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE);
   dataChar->addDescriptor(dataDesc);
 
   cmdChar->setCallbacks(new CmdCallbacks());
   timeChar->setCallbacks(new TimeCallbacks());
 
-  idChar->setValue((const uint8_t*)MODULE_ID, strlen(MODULE_ID));
+  idChar->setValue((uint8_t*)MODULE_ID, strlen(MODULE_ID));
 
   pService->start();
 
@@ -570,14 +580,13 @@ void setup() {
   );
 
   BLE2902* battDesc = new BLE2902();
-  battDesc->setAccessPermissions(ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE);
   battChar->addDescriptor(battDesc);
 
   battChar->setValue(&batteryPct, 1);
   pBatteryService->start();
 
   BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(BLEUUID(GAIT_SERVICE_UUID));
+  pAdvertising->addServiceUUID(serviceUUID);
   pAdvertising->setScanResponse(true);
 
   BLEDevice::startAdvertising();
