@@ -89,8 +89,8 @@ Notes:
      SDA = GPIO6
      SCL = GPIO7
 */
-#define I2C_SDA 8
-#define I2C_SCL 9
+#define I2C_SDA 6
+#define I2C_SCL 7
 
 /* Sampling / packetisation */
 #define SAMPLE_RATE_HZ             200
