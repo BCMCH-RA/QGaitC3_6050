@@ -3,165 +3,237 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gait IMU Recorder v12 — ESP32C3 + MPU6050</title>
+  <title>Gait IMU Recorder v12 — 3 Modules — ESP32C3 + MPU6050</title>
   <style>
     :root {
-      color-scheme: light dark;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color-scheme: dark;
     }
 
     body {
       margin: 0;
       padding: 18px;
-      max-width: 1100px;
+      background: #0b1220;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      max-width: 1400px;
       margin-left: auto;
       margin-right: auto;
     }
 
     h1 {
       margin: 0 0 6px 0;
-      font-size: 22px;
+      font-size: 24px;
+    }
+
+    h3 {
+      margin: 18px 0 8px 0;
     }
 
     .subtitle {
-      opacity: 0.8;
+      opacity: 0.85;
       margin-bottom: 14px;
       font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
     }
 
     button {
-      margin: 2px;
-      padding: 8px 10px;
-      border-radius: 8px;
-      border: 1px solid rgba(128, 128, 128, 0.4);
-      background: rgba(128, 128, 128, 0.12);
+      padding: 9px 11px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #111827;
+      color: #e5e7eb;
       cursor: pointer;
       font-size: 14px;
     }
 
+    button:hover:not(:disabled) {
+      background: #1f2937;
+    }
+
     button:disabled {
-      opacity: 0.45;
+      opacity: 0.4;
       cursor: not-allowed;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .stat {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .stat .k {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-bottom: 4px;
+    }
+
+    .stat .v {
+      font-size: 16px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
     }
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 8px;
-      margin: 16px 0;
-      font-size: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
     }
 
     .card {
-      border: 1px solid rgba(128, 128, 128, 0.3);
-      border-radius: 10px;
-      padding: 10px;
+      border-radius: 14px;
+      border: 2px solid #334155;
+      padding: 14px;
+      background: #0f172a;
     }
 
-    .card .k {
-      opacity: 0.7;
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+
+    .badge {
+      margin-left: auto;
       font-size: 12px;
-      margin-bottom: 3px;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 4px 9px;
+      background: #374151;
+      color: white;
     }
 
-    .card .v {
-      font-size: 16px;
-      font-weight: 600;
+    .fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+
+    .field .k {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-bottom: 2px;
+    }
+
+    .field .v {
+      font-weight: 700;
       overflow-wrap: anywhere;
     }
 
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
     #log {
-      height: 280px;
+      height: 320px;
       overflow: auto;
-      background: rgba(0, 0, 0, 0.06);
-      border: 1px solid rgba(128, 128, 128, 0.3);
-      border-radius: 10px;
+      background: #020617;
+      border: 1px solid #334155;
+      border-radius: 12px;
       padding: 10px;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 12px;
+    }
+
+    .logline {
+      margin: 0 0 4px 0;
       white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
 
     hr {
       border: none;
-      border-top: 1px solid rgba(128, 128, 128, 0.3);
-      margin: 16px 0;
+      border-top: 1px solid #334155;
+      margin: 18px 0;
     }
   </style>
 </head>
 <body>
-  <h1>Gait IMU Recorder v12 — ESP32C3 + MPU6050</h1>
+  <h1>Gait IMU Recorder v12 — 3 Modules</h1>
   <div class="subtitle">
-    ESP32-C3 · MPU6050 · 200 Hz · BLE protocol v2 · binary recording · CSV/metadata export
+    ESP32-C3 + MPU6050 · 200 Hz · BLE protocol v2 · three-module recording · CSV/binary/metadata export<br>
+    Workflow: <strong>Connect Module</strong> three times → <strong>Start Streaming (All)</strong> → <strong>Start Recording</strong>.
   </div>
 
-  <div>
-    <button id="connect">Connect</button>
-    <button id="disconnect" disabled>Disconnect</button>
-
-    <button id="startStream" disabled>▶ Start Streaming</button>
-    <button id="stopStream" disabled>■ Stop Streaming</button>
-
+  <div class="toolbar">
+    <button id="connectAny">➕ Connect Module</button>
+    <button id="startStreamAll" disabled>▶ Start Streaming (All)</button>
+    <button id="stopStreamAll" disabled>■ Stop Streaming (All)</button>
     <button id="startRec" disabled>● Start Recording</button>
     <button id="stopRec" disabled>■ Stop Recording</button>
-
-    <button id="dlCsv" disabled>↓ Download CSV</button>
-    <button id="dlBin" disabled>↓ Download Binary</button>
-    <button id="dlMeta" disabled>↓ Download Metadata</button>
-
-    <button id="sync" disabled>↻ Sync Clocks</button>
+    <button id="syncAll" disabled>↻ Sync Clocks (All)</button>
+    <button id="dlCsvAll" disabled>↓ Combined CSV</button>
+    <button id="dlBinAll" disabled>↓ All Binary</button>
+    <button id="dlMeta" disabled>↓ Metadata</button>
   </div>
 
-  <div class="grid">
-    <div class="card">
-      <div class="k">CSV rows (total)</div>
-      <div class="v" id="rows">0</div>
-    </div>
-
-    <div class="card">
-      <div class="k">Binary size (approx.)</div>
-      <div class="v" id="binSize">0.00 MB</div>
-    </div>
-
-    <div class="card">
-      <div class="k">Session length</div>
-      <div class="v" id="sessionLength">--</div>
-    </div>
-
-    <div class="card">
+  <div class="stats">
+    <div class="stat">
       <div class="k">Session ID</div>
       <div class="v" id="sessionId">--</div>
     </div>
 
-    <div class="card">
-      <div class="k">Module ID</div>
-      <div class="v" id="moduleId">--</div>
+    <div class="stat">
+      <div class="k">Session length</div>
+      <div class="v" id="sessionLength">--</div>
     </div>
 
-    <div class="card">
-      <div class="k">Battery</div>
-      <div class="v" id="battery">--</div>
+    <div class="stat">
+      <div class="k">Modules connected</div>
+      <div class="v" id="connectedCount">0 / 3</div>
     </div>
 
-    <div class="card">
-      <div class="k">Measured sample rate</div>
-      <div class="v"><span id="rate">--</span> Hz</div>
+    <div class="stat">
+      <div class="k">Total CSV rows</div>
+      <div class="v" id="totalRows">0</div>
     </div>
 
-    <div class="card">
-      <div class="k">Packets recorded</div>
-      <div class="v" id="packets">0</div>
+    <div class="stat">
+      <div class="k">Total binary size</div>
+      <div class="v" id="totalBin">0.00 MB</div>
     </div>
 
-    <div class="card">
-      <div class="k">Lost packets</div>
-      <div class="v" id="lost">0</div>
+    <div class="stat">
+      <div class="k">Total sample rate</div>
+      <div class="v"><span id="totalRate">--</span> Hz</div>
     </div>
   </div>
 
+  <div id="cards" class="grid"></div>
+
   <hr>
 
-  <h3 style="margin-bottom:8px;">Event log</h3>
+  <h3>Event log</h3>
   <div id="log"></div>
 
   <script>
@@ -179,11 +251,12 @@
     const SAMPLE_RATE_HZ = 200;
     const SAMPLE_PERIOD_MS = 1000 / SAMPLE_RATE_HZ;
 
-    /* Must match firmware scaling */
+    /* Must match ESP32 firmware scaling */
     const ACC_SCALE = 0.000244140625;   /* g per raw count, ±8 g */
     const GYR_SCALE = 0.030517578125;   /* dps per raw count, ±1000 dps */
 
     const CSV_HEADER = [
+      "module_id",
       "sample_seq",
       "device_time_ms",
       "unix_time_ms",
@@ -197,73 +270,89 @@
       "flags"
     ].join(",");
 
-    const $ = (id) => document.getElementById(id);
+    const MODULES = [
+      {
+        id: "RightLeg",
+        label: "Right Leg",
+        color: "#ff5252",
+        bg: "rgba(255, 82, 82, 0.10)"
+      },
+      {
+        id: "LeftLeg",
+        label: "Left Leg",
+        color: "#448aff",
+        bg: "rgba(68, 138, 255, 0.10)"
+      },
+      {
+        id: "Torso",
+        label: "Torso",
+        color: "#69f0ae",
+        bg: "rgba(105, 240, 174, 0.10)"
+      }
+    ];
 
-    const connectBtn = $("connect");
-    const disconnectBtn = $("disconnect");
+    const slots = {};
 
-    const startStreamBtn = $("startStream");
-    const stopStreamBtn = $("stopStream");
-
-    const startRecBtn = $("startRec");
-    const stopRecBtn = $("stopRec");
-
-    const dlCsvBtn = $("dlCsv");
-    const dlBinBtn = $("dlBin");
-    const dlMetaBtn = $("dlMeta");
-
-    const syncBtn = $("sync");
-
-    const rowsEl = $("rows");
-    const binSizeEl = $("binSize");
-    const sessionLengthEl = $("sessionLength");
-    const sessionIdEl = $("sessionId");
-    const moduleIdEl = $("moduleId");
-    const batteryEl = $("battery");
-    const rateEl = $("rate");
-    const packetsEl = $("packets");
-    const lostEl = $("lost");
-    const logEl = $("log");
-
-    let device = null;
-    let server = null;
-    let characteristics = {};
-
-    let connected = false;
-    let streaming = false;
-    let recording = false;
-
+    let globalRecording = false;
     let sessionId = null;
     let sessionStart = null;
     let sessionEnd = null;
 
-    let csvChunks = [];
-    let csvPending = [];
-    let csvRowCount = 0;
-
-    let binChunks = [];
-    let binBytes = 0;
-
-    let packetCount = 0;
-    let sampleCount = 0;
-    let lostPackets = 0;
-    let lostSamples = 0;
-
-    let lastPacketSeq = null;
-    let expectedSampleSeq = null;
-
-    let timeSync = null;
-    let lastSyncSent = null;
-
     let events = [];
-
-    let rateSamples = 0;
     let rateLast = performance.now();
-    let currentRate = 0;
 
-    function log(msg) {
+    const $ = (id) => document.getElementById(id);
+
+    MODULES.forEach((m) => {
+      slots[m.id] = {
+        ...m,
+
+        device: null,
+        server: null,
+        chars: {},
+
+        connected: false,
+        streaming: false,
+
+        reportedId: "",
+        battery: "--",
+
+        timeSync: null,
+        lastSyncSent: null,
+
+        lastPacketSeq: null,
+        expectedSampleSeq: null,
+
+        rateSamples: 0,
+        currentRate: 0,
+
+        packetCount: 0,
+        sampleCount: 0,
+        lostPackets: 0,
+        lostSamples: 0,
+
+        csvChunks: [],
+        csvPending: [],
+        csvRowCount: 0,
+
+        binChunks: [],
+        binBytes: 0
+      };
+    });
+
+    function log(msg, color = "#e5e7eb") {
       const stamp = new Date().toLocaleTimeString();
-      logEl.textContent = `[${stamp}] ${msg}\n` + logEl.textContent;
+      const line = document.createElement("div");
+      line.className = "logline";
+      line.style.color = color;
+      line.textContent = `[${stamp}] ${msg}`;
+
+      const logEl = $("log");
+      logEl.prepend(line);
+
+      while (logEl.children.length > 300) {
+        logEl.removeChild(logEl.lastChild);
+      }
 
       events.push({
         t: new Date().toISOString(),
@@ -275,21 +364,178 @@
       }
     }
 
-    function updateButtons() {
-      connectBtn.disabled = connected;
-      disconnectBtn.disabled = !connected;
+    function renderCards() {
+      const container = $("cards");
 
-      startStreamBtn.disabled = !connected || streaming;
-      stopStreamBtn.disabled = !connected || !streaming;
+      container.innerHTML = MODULES.map((m) => `
+        <div class="card" id="card-${m.id}" style="border-color:${m.color}; background:${m.bg};">
+          <div class="card-title">
+            <span class="dot" style="background:${m.color}"></span>
+            ${m.label}
+            <span class="badge" id="badge-${m.id}">Disconnected</span>
+          </div>
 
-      startRecBtn.disabled = !connected || recording;
-      stopRecBtn.disabled = !connected || !recording;
+          <div class="fields">
+            <div class="field">
+              <div class="k">Device</div>
+              <div class="v" id="device-${m.id}">--</div>
+            </div>
 
-      syncBtn.disabled = !connected;
+            <div class="field">
+              <div class="k">Reported module ID</div>
+              <div class="v" id="reported-${m.id}">--</div>
+            </div>
 
-      dlCsvBtn.disabled = csvRowCount === 0;
-      dlBinBtn.disabled = binBytes === 0;
-      dlMetaBtn.disabled = !sessionId && csvRowCount === 0 && binBytes === 0;
+            <div class="field">
+              <div class="k">Battery</div>
+              <div class="v" id="battery-${m.id}">--</div>
+            </div>
+
+            <div class="field">
+              <div class="k">Sample rate</div>
+              <div class="v"><span id="rate-${m.id}">--</span> Hz</div>
+            </div>
+
+            <div class="field">
+              <div class="k">Packets</div>
+              <div class="v" id="packets-${m.id}">0</div>
+            </div>
+
+            <div class="field">
+              <div class="k">Samples</div>
+              <div class="v" id="samples-${m.id}">0</div>
+            </div>
+
+            <div class="field">
+              <div class="k">CSV rows</div>
+              <div class="v" id="rows-${m.id}">0</div>
+            </div>
+
+            <div class="field">
+              <div class="k">Binary size</div>
+              <div class="v" id="bin-${m.id}">0.00 MB</div>
+            </div>
+
+            <div class="field">
+              <div class="k">Lost packets / samples</div>
+              <div class="v" id="lost-${m.id}">0 / 0</div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="connect-${m.id}">Connect</button>
+            <button id="disconnect-${m.id}" disabled>Disconnect</button>
+            <button id="stream-${m.id}" disabled>▶ Start Stream</button>
+            <button id="sync-${m.id}" disabled>↻ Sync</button>
+            <button id="dlcsv-${m.id}" disabled>CSV</button>
+            <button id="dlbin-${m.id}" disabled>BIN</button>
+          </div>
+        </div>
+      `).join("");
+
+      MODULES.forEach((m) => {
+        $(`connect-${m.id}`).addEventListener("click", () => connectDevice(m.id));
+        $(`disconnect-${m.id}`).addEventListener("click", () => disconnectSlot(m.id));
+        $(`stream-${m.id}`).addEventListener("click", () => toggleStreamSlot(m.id));
+        $(`sync-${m.id}`).addEventListener("click", () => syncSlot(slots[m.id]));
+        $(`dlcsv-${m.id}`).addEventListener("click", () => downloadSlotCsv(slots[m.id]));
+        $(`dlbin-${m.id}`).addEventListener("click", () => downloadSlotBinary(slots[m.id]));
+      });
+    }
+
+    function updateUI() {
+      let anyConnected = false;
+      let anyStreaming = false;
+      let connectedCount = 0;
+
+      let totalRows = 0;
+      let totalBin = 0;
+      let totalRate = 0;
+
+      for (const m of MODULES) {
+        const s = slots[m.id];
+
+        if (s.connected) {
+          anyConnected = true;
+          connectedCount++;
+          anyStreaming = anyStreaming || s.streaming;
+        }
+
+        totalRows += s.csvRowCount;
+        totalBin += s.binBytes;
+        totalRate += s.currentRate;
+
+        const badge = $(`badge-${m.id}`);
+
+        let status = "Disconnected";
+        let badgeColor = "#374151";
+
+        if (s.connected && globalRecording) {
+          status = "Recording";
+          badgeColor = "#b91c1c";
+        } else if (s.connected && s.streaming) {
+          status = "Streaming";
+          badgeColor = "#2563eb";
+        } else if (s.connected) {
+          status = "Connected";
+          badgeColor = "#16a34a";
+        }
+
+        badge.textContent = status;
+        badge.style.background = badgeColor;
+
+        $(`device-${m.id}`).textContent = s.device ? (s.device.name || s.device.id || "--") : "--";
+        $(`reported-${m.id}`).textContent = s.reportedId || "--";
+        $(`battery-${m.id}`).textContent = s.battery || "--";
+        $(`rate-${m.id}`).textContent = s.connected ? s.currentRate.toFixed(1) : "--";
+        $(`packets-${m.id}`).textContent = s.packetCount;
+        $(`samples-${m.id}`).textContent = s.sampleCount;
+        $(`rows-${m.id}`).textContent = s.csvRowCount;
+        $(`bin-${m.id}`).textContent = `${(s.binBytes / 1048576).toFixed(2)} MB`;
+        $(`lost-${m.id}`).textContent = `${s.lostPackets} / ${s.lostSamples}`;
+
+        $(`connect-${m.id}`).disabled = !navigator.bluetooth || s.connected;
+        $(`disconnect-${m.id}`).disabled = !s.connected;
+
+        const streamBtn = $(`stream-${m.id}`);
+        streamBtn.disabled = !s.connected;
+        streamBtn.textContent = s.streaming ? "■ Stop Stream" : "▶ Start Stream";
+
+        $(`sync-${m.id}`).disabled = !s.connected;
+        $(`dlcsv-${m.id}`).disabled = s.csvRowCount === 0;
+        $(`dlbin-${m.id}`).disabled = s.binBytes === 0;
+      }
+
+      $("connectAny").disabled = !navigator.bluetooth;
+
+      $("startStreamAll").disabled =
+        !anyConnected ||
+        !MODULES.some((m) => slots[m.id].connected && !slots[m.id].streaming);
+
+      $("stopStreamAll").disabled = !anyStreaming;
+
+      $("startRec").disabled = !anyConnected || globalRecording;
+      $("stopRec").disabled = !globalRecording;
+
+      $("syncAll").disabled = !anyConnected;
+
+      $("dlCsvAll").disabled = totalRows === 0;
+      $("dlBinAll").disabled = totalBin === 0;
+      $("dlMeta").disabled = !sessionId && totalRows === 0 && totalBin === 0;
+
+      $("sessionId").textContent = sessionId || "--";
+
+      if (sessionStart) {
+        const end = sessionEnd || Date.now();
+        $("sessionLength").textContent = formatDuration(end - sessionStart);
+      } else {
+        $("sessionLength").textContent = "--";
+      }
+
+      $("connectedCount").textContent = `${connectedCount} / 3`;
+      $("totalRows").textContent = totalRows;
+      $("totalBin").textContent = `${(totalBin / 1048576).toFixed(2)} MB`;
+      $("totalRate").textContent = anyConnected ? totalRate.toFixed(1) : "--";
     }
 
     function formatDuration(ms) {
@@ -313,21 +559,6 @@
       return `${base}-${rand}`;
     }
 
-    function flushCsvPending() {
-      if (csvPending.length > 0) {
-        csvChunks.push(csvPending.join("\n") + "\n");
-        csvPending = [];
-      }
-    }
-
-    function addCsvLine(arr) {
-      csvPending.push(arr.join(","));
-
-      if (csvPending.length >= 1000) {
-        flushCsvPending();
-      }
-    }
-
     function downloadBlob(blob, filename) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -340,235 +571,406 @@
       setTimeout(() => URL.revokeObjectURL(url), 10000);
     }
 
-    function downloadCsv() {
-      if (csvRowCount === 0) {
-        log("No CSV rows to download.");
-        return;
-      }
-
-      flushCsvPending();
-
-      const blob = new Blob(csvChunks, { type: "text/csv;charset=utf-8" });
-      const name = `${sessionId || "gait_session"}.csv`;
-      downloadBlob(blob, name);
-      log(`CSV download started: ${name}`);
-    }
-
-    function downloadBinary() {
-      if (binBytes === 0) {
-        log("No binary data to download.");
-        return;
-      }
-
-      const blob = new Blob(binChunks, { type: "application/octet-stream" });
-      const name = `${sessionId || "gait_session"}.bin`;
-      downloadBlob(blob, name);
-      log(`Binary download started: ${name}`);
-    }
-
-    function buildMetadata() {
-      flushCsvPending();
-
-      return {
-        app: "Gait IMU Recorder v12 — ESP32C3 + MPU6050",
-        protocol_version: 2,
-        generated: new Date().toISOString(),
-
-        session_id: sessionId,
-        session_start: sessionStart ? new Date(sessionStart).toISOString() : null,
-        session_end: sessionEnd ? new Date(sessionEnd).toISOString() : null,
-        session_length_ms: sessionStart ? ((sessionEnd || Date.now()) - sessionStart) : 0,
-
-        device_name: device ? device.name : null,
-        module_id: moduleIdEl.textContent || null,
-        battery: batteryEl.textContent || null,
-
-        sample_rate_hz: SAMPLE_RATE_HZ,
-        sample_period_ms: SAMPLE_PERIOD_MS,
-
-        scaling: {
-          accel_g_per_count: ACC_SCALE,
-          gyro_dps_per_count: GYR_SCALE,
-          accel_range: "+/-8 g",
-          gyro_range: "+/-1000 dps"
-        },
-
-        binary_format: [
-          "Complete BLE DATA notification packets, little-endian.",
-          "Each packet:",
-          "  uint8 protocol_version = 2",
-          "  uint16 packet_seq",
-          "  uint32 first_sample_seq",
-          "  uint32 first_device_time_ms",
-          "  uint8 sample_count",
-          "  uint8 flags",
-          "  then sample_count * (int16 ax, ay, az, gx, gy, gz)"
-        ].join("\n"),
-
-        csv_columns: CSV_HEADER.split(","),
-
-        stats: {
-          csv_rows: csvRowCount,
-          binary_bytes: binBytes,
-          packets_recorded: packetCount,
-          samples_recorded: sampleCount,
-          lost_packets: lostPackets,
-          lost_samples: lostSamples,
-          measured_rate_hz: Number(currentRate.toFixed(2))
-        },
-
-        time_sync: timeSync,
-
-        events: events.slice(-200)
-      };
-    }
-
-    function downloadMetadata() {
-      const meta = buildMetadata();
-      const blob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
-      const name = `${sessionId || "gait_session"}.meta.json`;
-      downloadBlob(blob, name);
-      log(`Metadata download started: ${name}`);
-    }
-
-    function startRecording() {
-      if (!connected || recording) {
-        return;
-      }
-
-      sessionId = makeSessionId();
-      sessionStart = Date.now();
-      sessionEnd = null;
-
-      csvChunks = [CSV_HEADER + "\n"];
-      csvPending = [];
-      csvRowCount = 0;
-
-      binChunks = [];
-      binBytes = 0;
-
-      packetCount = 0;
-      sampleCount = 0;
-      lostPackets = 0;
-      lostSamples = 0;
-
-      lastPacketSeq = null;
-      expectedSampleSeq = null;
-
-      recording = true;
-
-      log(`Recording started. Session ID: ${sessionId}`);
-      updateButtons();
-    }
-
-    function stopRecording() {
-      if (!recording) {
-        return;
-      }
-
-      recording = false;
-      sessionEnd = Date.now();
-      flushCsvPending();
-
-      log(
-        `Recording stopped. Rows=${csvRowCount}, ` +
-        `binary=${(binBytes / 1048576).toFixed(2)} MB, ` +
-        `packets=${packetCount}`
-      );
-
-      updateButtons();
-    }
-
-    async function sendCmd(bytes) {
-      if (!connected || !characteristics.cmd) {
-        return false;
-      }
-
-      try {
-        await characteristics.cmd.writeValue(new Uint8Array(bytes));
-        return true;
-      } catch (err) {
-        log(`CMD write failed: ${err}`);
-        return false;
+    function flushSlot(slot) {
+      if (slot.csvPending.length > 0) {
+        slot.csvChunks.push(slot.csvPending.join("\n") + "\n");
+        slot.csvPending = [];
       }
     }
 
-    async function startStreaming() {
-      if (!connected) {
-        return;
-      }
+    function addSlotCsvLine(slot, arr) {
+      slot.csvPending.push(arr.join(","));
 
-      lastPacketSeq = null;
-      expectedSampleSeq = null;
-
-      const ok = await sendCmd([0x01]);
-      if (ok) {
-        streaming = true;
-        log("Start streaming command sent.");
-      }
-
-      updateButtons();
-    }
-
-    async function stopStreaming() {
-      if (!connected) {
-        return;
-      }
-
-      const ok = await sendCmd([0x02]);
-      if (ok) {
-        streaming = false;
-        log("Stop streaming command sent.");
-      }
-
-      updateButtons();
-    }
-
-    async function syncClocks() {
-      if (!connected || !characteristics.time) {
-        return;
-      }
-
-      const now = Date.now();
-      const sec = Math.floor(now / 1000);
-      const ms = now % 1000;
-
-      lastSyncSent = {
-        unixMs: now,
-        perf: performance.now()
-      };
-
-      const buf = new ArrayBuffer(6);
-      const dv = new DataView(buf);
-
-      dv.setUint32(0, sec, true);
-      dv.setUint16(4, ms, true);
-
-      try {
-        await characteristics.time.writeValue(buf);
-        log(`Time sync sent: ${new Date(now).toISOString()}`);
-      } catch (err) {
-        log(`Time sync write failed: ${err}`);
+      if (slot.csvPending.length >= 1000) {
+        flushSlot(slot);
       }
     }
 
     function delta32(a, b) {
       let d = (a - b) >>> 0;
+
       if (d >= 0x80000000) {
         d -= 0x100000000;
       }
+
       return d;
     }
 
-    function deviceToUnix(deviceMs) {
-      if (!timeSync) {
+    function deviceToUnix(slot, deviceMs) {
+      if (!slot.timeSync) {
         return null;
       }
 
-      return timeSync.unixMs + delta32(deviceMs, timeSync.deviceMs);
+      return slot.timeSync.unixMs + delta32(deviceMs, slot.timeSync.deviceMs);
     }
 
-    function onTimeAck(event) {
+    async function writeChar(char, bytes) {
+      const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+
+      if (char.writeValueWithResponse) {
+        try {
+          await char.writeValueWithResponse(data);
+          return;
+        } catch (err) {
+          // Fall through.
+        }
+      }
+
+      if (char.writeValueWithoutResponse) {
+        try {
+          await char.writeValueWithoutResponse(data);
+          return;
+        } catch (err) {
+          // Fall through.
+        }
+      }
+
+      await char.writeValue(data);
+    }
+
+    async function sendCmd(slot, bytes) {
+      if (!slot.connected || !slot.chars.cmd) {
+        return false;
+      }
+
+      try {
+        await writeChar(slot.chars.cmd, new Uint8Array(bytes));
+        return true;
+      } catch (err) {
+        log(`${slot.label} command failed: ${err}`, slot.color);
+        return false;
+      }
+    }
+
+    async function startStreamSlot(slot) {
+      if (!slot.connected) {
+        return false;
+      }
+
+      slot.lastPacketSeq = null;
+      slot.expectedSampleSeq = null;
+
+      const ok = await sendCmd(slot, [0x01]);
+
+      if (ok) {
+        slot.streaming = true;
+        log(`${slot.label} streaming started`, slot.color);
+        updateUI();
+      }
+
+      return ok;
+    }
+
+    async function stopStreamSlot(slot) {
+      if (!slot.connected) {
+        return false;
+      }
+
+      const ok = await sendCmd(slot, [0x02]);
+
+      if (ok) {
+        slot.streaming = false;
+        log(`${slot.label} streaming stopped`, slot.color);
+        updateUI();
+      }
+
+      return ok;
+    }
+
+    async function toggleStreamSlot(slotId) {
+      const slot = slots[slotId];
+
+      if (!slot.connected) {
+        return;
+      }
+
+      if (slot.streaming) {
+        await stopStreamSlot(slot);
+      } else {
+        await startStreamSlot(slot);
+      }
+    }
+
+    async function startStreamAll() {
+      for (const m of MODULES) {
+        const s = slots[m.id];
+
+        if (s.connected && !s.streaming) {
+          await startStreamSlot(s);
+        }
+      }
+    }
+
+    async function stopStreamAll() {
+      for (const m of MODULES) {
+        const s = slots[m.id];
+
+        if (s.connected && s.streaming) {
+          await stopStreamSlot(s);
+        }
+      }
+    }
+
+    async function syncSlot(slot) {
+      if (!slot.connected || !slot.chars.time) {
+        return false;
+      }
+
+      const now = Date.now();
+
+      slot.lastSyncSent = {
+        unixMs: now,
+        perf: performance.now()
+      };
+
+      const bytes = new Uint8Array(6);
+      const dv = new DataView(bytes.buffer);
+
+      dv.setUint32(0, Math.floor(now / 1000), true);
+      dv.setUint16(4, now % 1000, true);
+
+      try {
+        await writeChar(slot.chars.time, bytes);
+        log(`${slot.label} time sync sent`, slot.color);
+        return true;
+      } catch (err) {
+        log(`${slot.label} time sync failed: ${err}`, slot.color);
+        return false;
+      }
+    }
+
+    async function syncAll() {
+      for (const m of MODULES) {
+        const s = slots[m.id];
+
+        if (s.connected) {
+          await syncSlot(s);
+        }
+      }
+    }
+
+    async function setupBattery(slot) {
+      try {
+        const battService = await slot.server.getPrimaryService(BATTERY_SERVICE_UUID);
+        const battLevel = await battService.getCharacteristic(BATTERY_LEVEL_CHAR_UUID);
+
+        const updateBattery = (value) => {
+          if (value && value.byteLength >= 1) {
+            slot.battery = `${value.getUint8(0)} %`;
+            updateUI();
+          }
+        };
+
+        const initial = await battLevel.readValue();
+        updateBattery(initial);
+
+        await battLevel.startNotifications();
+        battLevel.addEventListener("characteristicvaluechanged", (e) => {
+          updateBattery(e.target.value);
+        });
+      } catch (err) {
+        slot.battery = "--";
+      }
+    }
+
+    function clearSlotConnection(slot) {
+      slot.device = null;
+      slot.server = null;
+      slot.chars = {};
+
+      slot.connected = false;
+      slot.streaming = false;
+
+      slot.battery = "--";
+      slot.timeSync = null;
+      slot.lastSyncSent = null;
+
+      slot.lastPacketSeq = null;
+      slot.expectedSampleSeq = null;
+
+      slot.rateSamples = 0;
+      slot.currentRate = 0;
+    }
+
+    function onDeviceDisconnected(event) {
+      const slot = Object.values(slots).find((s) => s.device === event.target);
+
+      if (!slot) {
+        return;
+      }
+
+      if (globalRecording) {
+        flushSlot(slot);
+      }
+
+      log(`${slot.label} disconnected`, slot.color);
+      clearSlotConnection(slot);
+      updateUI();
+    }
+
+    function disconnectSlot(slotId) {
+      const slot = slots[slotId];
+
+      if (slot.device && slot.device.gatt.connected) {
+        try {
+          slot.device.gatt.disconnect();
+        } catch (err) {
+          // Ignore.
+        }
+      } else {
+        clearSlotConnection(slot);
+        updateUI();
+      }
+    }
+
+    async function connectDevice(preferredId = null) {
+      if (!navigator.bluetooth) {
+        log("Web Bluetooth is not available in this browser.", "#ef4444");
+        return;
+      }
+
+      let device;
+
+      try {
+        device = await navigator.bluetooth.requestDevice({
+          filters: [
+            { services: [SERVICE_UUID] }
+          ],
+          optionalServices: [BATTERY_SERVICE_UUID]
+        });
+      } catch (err) {
+        log(`Device selection failed: ${err}`, "#f59e0b");
+        return;
+      }
+
+      try {
+        const existing = Object.values(slots).find(
+          (s) => s.device && s.device.id === device.id
+        );
+
+        if (existing) {
+          log(`Device already connected as ${existing.label}.`, existing.color);
+          return;
+        }
+
+        device.addEventListener("gattserverdisconnected", onDeviceDisconnected);
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(SERVICE_UUID);
+
+        const chars = {};
+
+        chars.cmd = await service.getCharacteristic(CMD_CHAR_UUID);
+        chars.time = await service.getCharacteristic(TIME_CHAR_UUID);
+        chars.data = await service.getCharacteristic(DATA_CHAR_UUID);
+        chars.id = await service.getCharacteristic(ID_CHAR_UUID);
+
+        let reportedId = "";
+
+        try {
+          const idValue = await chars.id.readValue();
+          reportedId = new TextDecoder()
+            .decode(idValue)
+            .replace(/\0/g, "")
+            .trim();
+        } catch (err) {
+          reportedId = "";
+        }
+
+        let targetId = null;
+
+        const freeSlots = MODULES
+          .filter((m) => !slots[m.id].connected)
+          .map((m) => m.id);
+
+        if (reportedId && slots[reportedId]) {
+          targetId = reportedId;
+        } else if (preferredId && !slots[preferredId].connected) {
+          targetId = preferredId;
+        } else if (freeSlots.length > 0) {
+          targetId = freeSlots[0];
+        } else {
+          log("All module slots are already connected. Disconnect one first.", "#f59e0b");
+          try {
+            device.gatt.disconnect();
+          } catch (err) {
+            // Ignore.
+          }
+          return;
+        }
+
+        const slot = slots[targetId];
+
+        if (slot.connected && slot.device) {
+          try {
+            slot.device.gatt.disconnect();
+          } catch (err) {
+            // Ignore.
+          }
+
+          clearSlotConnection(slot);
+        }
+
+        slot.device = device;
+        slot.server = server;
+        slot.chars = chars;
+
+        slot.connected = true;
+        slot.streaming = false;
+
+        slot.reportedId = reportedId || "--";
+
+        slot.lastPacketSeq = null;
+        slot.expectedSampleSeq = null;
+
+        slot.timeSync = null;
+        slot.lastSyncSent = null;
+
+        await chars.data.startNotifications();
+        chars.data.addEventListener("characteristicvaluechanged", (e) => {
+          handleData(slot.id, e);
+        });
+
+        await chars.time.startNotifications();
+        chars.time.addEventListener("characteristicvaluechanged", (e) => {
+          handleTime(slot.id, e);
+        });
+
+        setupBattery(slot);
+
+        log(
+          `${slot.label} connected to ${device.name || "device"}${reportedId ? ` (ID: ${reportedId})` : ""}`,
+          slot.color
+        );
+
+        if (reportedId && reportedId !== slot.id) {
+          log(
+            `Warning: device ID is "${reportedId}", but assigned to ${slot.id} card.`,
+            "#f59e0b"
+          );
+        }
+
+        updateUI();
+      } catch (err) {
+        log(`Connect failed: ${err}`, "#ef4444");
+
+        try {
+          if (device && device.gatt.connected) {
+            device.gatt.disconnect();
+          }
+        } catch (innerErr) {
+          // Ignore.
+        }
+      }
+    }
+
+    function handleTime(slotId, event) {
+      const slot = slots[slotId];
+
+      if (!slot) {
+        return;
+      }
+
       const dv = event.target.value;
 
       if (!dv || dv.byteLength < 8) {
@@ -578,14 +980,13 @@
       const deviceMs = dv.getUint32(0, true);
       const unixLow = dv.getUint32(4, true);
 
-      const rtt = lastSyncSent ? (performance.now() - lastSyncSent.perf) : 0;
-      const sentUnix = lastSyncSent ? lastSyncSent.unixMs : Date.now();
+      const rtt = slot.lastSyncSent ? (performance.now() - slot.lastSyncSent.perf) : 0;
+      const sentUnix = slot.lastSyncSent ? slot.lastSyncSent.unixMs : Date.now();
 
       const U32 = 0x100000000;
 
       let unixMs = Math.floor(sentUnix / U32) * U32 + unixLow;
 
-      /* Correct possible 32-bit boundary crossing */
       if (unixMs < sentUnix - 0x80000000) {
         unixMs += U32;
       }
@@ -597,17 +998,23 @@
       /* Rough one-way latency compensation */
       unixMs += Math.round(rtt / 2);
 
-      timeSync = {
+      slot.timeSync = {
         deviceMs: deviceMs,
         unixMs: unixMs,
         rttMs: Math.round(rtt),
         createdAt: new Date().toISOString()
       };
 
-      log(`Time ACK: device_ms=${deviceMs}, unix_ms=${unixMs}, RTT=${Math.round(rtt)} ms`);
+      log(`${slot.label} time synced (RTT ${Math.round(rtt)} ms)`, slot.color);
     }
 
-    function onData(event) {
+    function handleData(slotId, event) {
+      const slot = slots[slotId];
+
+      if (!slot) {
+        return;
+      }
+
       const dv = event.target.value;
 
       if (!dv || dv.byteLength < 13) {
@@ -615,6 +1022,7 @@
       }
 
       const version = dv.getUint8(0);
+
       if (version !== 2) {
         return;
       }
@@ -632,44 +1040,48 @@
       const expectedLen = 13 + count * 12;
 
       if (dv.byteLength < expectedLen) {
-        log(`Short DATA packet: got ${dv.byteLength}, expected ${expectedLen}`);
+        log(`${slot.label} short DATA packet: got ${dv.byteLength}, expected ${expectedLen}`, slot.color);
         return;
       }
 
-      rateSamples += count;
+      if (!slot.streaming) {
+        slot.streaming = true;
+      }
+
+      slot.rateSamples += count;
 
       /* Packet loss detection */
-      if (lastPacketSeq !== null) {
-        const expectedPkt = (lastPacketSeq + 1) & 0xFFFF;
+      if (slot.lastPacketSeq !== null) {
+        const expectedPkt = (slot.lastPacketSeq + 1) & 0xFFFF;
 
         if (pktSeq !== expectedPkt) {
           const missing = (pktSeq - expectedPkt) & 0xFFFF;
 
           if (missing > 0 && missing < 0x8000) {
-            lostPackets += missing;
+            slot.lostPackets += missing;
           }
         }
       }
 
-      lastPacketSeq = pktSeq;
+      slot.lastPacketSeq = pktSeq;
 
       /* Sample sequence loss detection */
-      if (expectedSampleSeq !== null) {
-        const missingSamples = (firstSampleSeq - expectedSampleSeq) >>> 0;
+      if (slot.expectedSampleSeq !== null) {
+        const missingSamples = (firstSampleSeq - slot.expectedSampleSeq) >>> 0;
 
         if (missingSamples > 0 && missingSamples < 0x80000000) {
-          lostSamples += missingSamples;
+          slot.lostSamples += missingSamples;
         }
       }
 
-      expectedSampleSeq = (firstSampleSeq + count) >>> 0;
+      slot.expectedSampleSeq = (firstSampleSeq + count) >>> 0;
 
-      if (!recording) {
+      slot.packetCount++;
+      slot.sampleCount += count;
+
+      if (!globalRecording) {
         return;
       }
-
-      packetCount++;
-      sampleCount += count;
 
       /*
          Save complete BLE DATA packet exactly as received.
@@ -681,8 +1093,8 @@
         dv.byteLength
       ).slice();
 
-      binChunks.push(packetBytes);
-      binBytes += packetBytes.byteLength;
+      slot.binChunks.push(packetBytes);
+      slot.binBytes += packetBytes.byteLength;
 
       for (let i = 0; i < count; i++) {
         const off = 13 + i * 12;
@@ -697,9 +1109,10 @@
 
         const seq = (firstSampleSeq + i) >>> 0;
         const deviceMs = (firstDeviceMs + i * SAMPLE_PERIOD_MS) >>> 0;
-        const unixMs = deviceToUnix(deviceMs);
+        const unixMs = deviceToUnix(slot, deviceMs);
 
-        addCsvLine([
+        addSlotCsvLine(slot, [
+          slot.id,
           seq,
           deviceMs,
           unixMs === null ? "" : Math.round(unixMs),
@@ -713,166 +1126,283 @@
           flags
         ]);
 
-        csvRowCount++;
+        slot.csvRowCount++;
       }
     }
 
-    function onDisconnected() {
-      if (recording) {
-        recording = false;
-        sessionEnd = Date.now();
-        flushCsvPending();
-      }
-
-      connected = false;
-      streaming = false;
-
-      server = null;
-      characteristics = {};
-
-      lastPacketSeq = null;
-      expectedSampleSeq = null;
-
-      log("BLE disconnected.");
-      updateButtons();
-    }
-
-    async function connect() {
-      if (!navigator.bluetooth) {
-        log("Web Bluetooth is not available in this browser.");
+    function startRecording() {
+      if (globalRecording) {
         return;
       }
 
-      if (!window.isSecureContext) {
-        log("Warning: Web Bluetooth requires HTTPS or localhost.");
+      sessionId = makeSessionId();
+      sessionStart = Date.now();
+      sessionEnd = null;
+
+      globalRecording = true;
+
+      for (const m of MODULES) {
+        const s = slots[m.id];
+
+        s.csvChunks = [];
+        s.csvPending = [];
+        s.csvRowCount = 0;
+
+        s.binChunks = [];
+        s.binBytes = 0;
+
+        s.packetCount = 0;
+        s.sampleCount = 0;
+        s.lostPackets = 0;
+        s.lostSamples = 0;
+
+        s.lastPacketSeq = null;
+        s.expectedSampleSeq = null;
       }
 
-      try {
-        device = await navigator.bluetooth.requestDevice({
-          filters: [
-            { services: [SERVICE_UUID] }
-          ],
-          optionalServices: [BATTERY_SERVICE_UUID]
-        });
-
-        device.addEventListener("gattserverdisconnected", onDisconnected);
-
-        server = await device.gatt.connect();
-
-        const service = await server.getPrimaryService(SERVICE_UUID);
-
-        characteristics.cmd = await service.getCharacteristic(CMD_CHAR_UUID);
-        characteristics.time = await service.getCharacteristic(TIME_CHAR_UUID);
-        characteristics.data = await service.getCharacteristic(DATA_CHAR_UUID);
-        characteristics.id = await service.getCharacteristic(ID_CHAR_UUID);
-
-        await characteristics.data.startNotifications();
-        characteristics.data.addEventListener("characteristicvaluechanged", onData);
-
-        await characteristics.time.startNotifications();
-        characteristics.time.addEventListener("characteristicvaluechanged", onTimeAck);
-
-        try {
-          const idValue = await characteristics.id.readValue();
-          const txt = new TextDecoder().decode(idValue);
-          moduleIdEl.textContent = txt;
-        } catch (err) {
-          moduleIdEl.textContent = "--";
-        }
-
-        try {
-          const battService = await server.getPrimaryService(BATTERY_SERVICE_UUID);
-          const battLevel = await battService.getCharacteristic(BATTERY_LEVEL_CHAR_UUID);
-
-          const updateBattery = (value) => {
-            if (value && value.byteLength >= 1) {
-              batteryEl.textContent = `${value.getUint8(0)} %`;
-            }
-          };
-
-          const initial = await battLevel.readValue();
-          updateBattery(initial);
-
-          await battLevel.startNotifications();
-          battLevel.addEventListener("characteristicvaluechanged", (e) => {
-            updateBattery(e.target.value);
-          });
-        } catch (err) {
-          batteryEl.textContent = "n/a";
-        }
-
-        connected = true;
-        streaming = false;
-        recording = false;
-
-        lastPacketSeq = null;
-        expectedSampleSeq = null;
-
-        log(`Connected to ${device.name || "device"}.`);
-        updateButtons();
-
-      } catch (err) {
-        log(`Connect failed: ${err}`);
-      }
+      log(`Recording started. Session ID: ${sessionId}`, "#60a5fa");
+      updateUI();
     }
 
-    function disconnect() {
-      if (device && device.gatt.connected) {
-        device.gatt.disconnect();
+    function stopRecording() {
+      if (!globalRecording) {
+        return;
       }
+
+      globalRecording = false;
+      sessionEnd = Date.now();
+
+      for (const m of MODULES) {
+        flushSlot(slots[m.id]);
+      }
+
+      log("Recording stopped.", "#60a5fa");
+      updateUI();
     }
 
-    connectBtn.addEventListener("click", connect);
-    disconnectBtn.addEventListener("click", disconnect);
+    function downloadSlotCsv(slot) {
+      if (slot.csvRowCount === 0) {
+        log(`${slot.label} has no CSV rows.`, slot.color);
+        return;
+      }
 
-    startStreamBtn.addEventListener("click", startStreaming);
-    stopStreamBtn.addEventListener("click", stopStreaming);
+      flushSlot(slot);
 
-    startRecBtn.addEventListener("click", startRecording);
-    stopRecBtn.addEventListener("click", stopRecording);
+      const parts = [CSV_HEADER + "\n"];
 
-    dlCsvBtn.addEventListener("click", downloadCsv);
-    dlBinBtn.addEventListener("click", downloadBinary);
-    dlMetaBtn.addEventListener("click", downloadMetadata);
+      for (const chunk of slot.csvChunks) {
+        parts.push(chunk);
+      }
 
-    syncBtn.addEventListener("click", syncClocks);
+      const blob = new Blob(parts, { type: "text/csv;charset=utf-8" });
+      const name = `${sessionId || "gait_session"}_${slot.id}.csv`;
+
+      downloadBlob(blob, name);
+      log(`${slot.label} CSV download started: ${name}`, slot.color);
+    }
+
+    function downloadSlotBinary(slot) {
+      if (slot.binBytes === 0) {
+        log(`${slot.label} has no binary data.`, slot.color);
+        return;
+      }
+
+      const blob = new Blob(slot.binChunks, { type: "application/octet-stream" });
+      const name = `${sessionId || "gait_session"}_${slot.id}.bin`;
+
+      downloadBlob(blob, name);
+      log(`${slot.label} binary download started: ${name}`, slot.color);
+    }
+
+    function downloadCombinedCsv() {
+      let totalRows = 0;
+
+      for (const m of MODULES) {
+        const s = slots[m.id];
+        flushSlot(s);
+        totalRows += s.csvRowCount;
+      }
+
+      if (totalRows === 0) {
+        log("No CSV rows to download.");
+        return;
+      }
+
+      const parts = [CSV_HEADER + "\n"];
+
+      for (const m of MODULES) {
+        const s = slots[m.id];
+
+        for (const chunk of s.csvChunks) {
+          parts.push(chunk);
+        }
+      }
+
+      const blob = new Blob(parts, { type: "text/csv;charset=utf-8" });
+      const name = `${sessionId || "gait_session"}_combined.csv`;
+
+      downloadBlob(blob, name);
+      log(`Combined CSV download started: ${name}`);
+    }
+
+    function downloadAllBinary() {
+      let any = false;
+      let delay = 0;
+
+      for (const m of MODULES) {
+        const s = slots[m.id];
+
+        if (s.binBytes > 0) {
+          any = true;
+
+          setTimeout(() => {
+            downloadSlotBinary(s);
+          }, delay);
+
+          delay += 800;
+        }
+      }
+
+      if (!any) {
+        log("No binary data to download.");
+        return;
+      }
+
+      log("Starting binary downloads. If the browser asks, allow multiple downloads.");
+    }
+
+    function buildMetadata() {
+      for (const m of MODULES) {
+        flushSlot(slots[m.id]);
+      }
+
+      const moduleMeta = {};
+
+      for (const m of MODULES) {
+        const s = slots[m.id];
+
+        moduleMeta[s.id] = {
+          label: s.label,
+          connected: s.connected,
+          streaming: s.streaming,
+          device_name: s.device ? (s.device.name || null) : null,
+          reported_id: s.reportedId || null,
+          battery: s.battery || null,
+
+          stats: {
+            packets: s.packetCount,
+            samples: s.sampleCount,
+            csv_rows: s.csvRowCount,
+            binary_bytes: s.binBytes,
+            lost_packets: s.lostPackets,
+            lost_samples: s.lostSamples,
+            measured_rate_hz: Number(s.currentRate.toFixed(2))
+          },
+
+          time_sync: s.timeSync,
+
+          suggested_files: {
+            csv: `${sessionId || "gait_session"}_${s.id}.csv`,
+            binary: `${sessionId || "gait_session"}_${s.id}.bin`
+          }
+        };
+      }
+
+      return {
+        app: "Gait IMU Recorder v12 — 3 Modules — ESP32C3 + MPU6050",
+        protocol_version: 2,
+        generated: new Date().toISOString(),
+
+        session_id: sessionId,
+        session_start: sessionStart ? new Date(sessionStart).toISOString() : null,
+        session_end: sessionEnd ? new Date(sessionEnd).toISOString() : null,
+        session_length_ms: sessionStart ? ((sessionEnd || Date.now()) - sessionStart) : 0,
+
+        sample_rate_hz: SAMPLE_RATE_HZ,
+        sample_period_ms: SAMPLE_PERIOD_MS,
+
+        scaling: {
+          accel_g_per_count: ACC_SCALE,
+          gyro_dps_per_count: GYR_SCALE,
+          accel_range: "+/-8 g",
+          gyro_range: "+/-1000 dps"
+        },
+
+        csv_columns: CSV_HEADER.split(","),
+
+        binary_format: [
+          "Binary files are per-module.",
+          "Each file contains complete BLE DATA notification packets, little-endian.",
+          "Each packet:",
+          "  uint8 protocol_version = 2",
+          "  uint16 packet_seq",
+          "  uint32 first_sample_seq",
+          "  uint32 first_device_time_ms",
+          "  uint8 sample_count",
+          "  uint8 flags",
+          "  then sample_count * (int16 ax, ay, az, gx, gy, gz)"
+        ].join("\n"),
+
+        modules: moduleMeta,
+
+        events: events.slice(-200)
+      };
+    }
+
+    function downloadMetadata() {
+      const meta = buildMetadata();
+      const blob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
+      const name = `${sessionId || "gait_session"}.meta.json`;
+
+      downloadBlob(blob, name);
+      log(`Metadata download started: ${name}`);
+    }
+
+    renderCards();
+
+    $("connectAny").addEventListener("click", () => connectDevice(null));
+    $("startStreamAll").addEventListener("click", startStreamAll);
+    $("stopStreamAll").addEventListener("click", stopStreamAll);
+    $("startRec").addEventListener("click", startRecording);
+    $("stopRec").addEventListener("click", stopRecording);
+    $("syncAll").addEventListener("click", syncAll);
+    $("dlCsvAll").addEventListener("click", downloadCombinedCsv);
+    $("dlBinAll").addEventListener("click", downloadAllBinary);
+    $("dlMeta").addEventListener("click", downloadMetadata);
 
     setInterval(() => {
       const now = performance.now();
       const dt = (now - rateLast) / 1000;
 
       if (dt > 0) {
-        currentRate = rateSamples / dt;
-        rateSamples = 0;
+        for (const m of MODULES) {
+          const s = slots[m.id];
+
+          if (s.connected) {
+            s.currentRate = s.rateSamples / dt;
+          } else {
+            s.currentRate = 0;
+          }
+
+          s.rateSamples = 0;
+        }
+
         rateLast = now;
       }
 
-      rowsEl.textContent = csvRowCount;
-      binSizeEl.textContent = `${(binBytes / 1048576).toFixed(2)} MB`;
-
-      if (sessionStart) {
-        const end = sessionEnd || Date.now();
-        sessionLengthEl.textContent = formatDuration(end - sessionStart);
-      } else {
-        sessionLengthEl.textContent = "--";
-      }
-
-      sessionIdEl.textContent = sessionId || "--";
-      packetsEl.textContent = packetCount;
-      lostEl.textContent = lostPackets;
-      rateEl.textContent = connected ? currentRate.toFixed(1) : "--";
-
-      updateButtons();
+      updateUI();
     }, 500);
 
-    updateButtons();
+    updateUI();
 
     if (!window.isSecureContext) {
-      log("Warning: Web Bluetooth requires HTTPS or localhost.");
+      log("Warning: Web Bluetooth requires HTTPS or localhost.", "#f59e0b");
     }
 
     if (!navigator.bluetooth) {
-      log("Web Bluetooth unavailable. Use Chrome/Edge over HTTPS or localhost.");
+      log("Web Bluetooth unavailable. Use Chrome/Edge over HTTPS or localhost.", "#ef4444");
+    } else {
+      log("Ready. Click Connect Module three times, one for each ESP32-C3 module.", "#60a5fa");
     }
   </script>
 </body>
