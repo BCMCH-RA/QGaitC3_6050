@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gait IMU Recorder v12 — ESP32C3 + MPU6050</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      padding: 18px;
+      max-width: 1100px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    h1 {
+      margin: 0 0 6px 0;
+      font-size: 22px;
+    }
+
+    .subtitle {
+      opacity: 0.8;
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+
+    button {
+      margin: 2px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(128, 128, 128, 0.4);
+      background: rgba(128, 128, 128, 0.12);
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 8px;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+
+    .card {
+      border: 1px solid rgba(128, 128, 128, 0.3);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .card .k {
+      opacity: 0.7;
+      font-size: 12px;
+      margin-bottom: 3px;
+    }
+
+    .card .v {
+      font-size: 16px;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    #log {
+      height: 280px;
+      overflow: auto;
+      background: rgba(0, 0, 0, 0.06);
+      border: 1px solid rgba(128, 128, 128, 0.3);
+      border-radius: 10px;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid rgba(128, 128, 128, 0.3);
+      margin: 16px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gait IMU Recorder v12 — ESP32C3 + MPU6050</h1>
+  <div class="subtitle">
+    ESP32-C3 · MPU6050 · 200 Hz · BLE protocol v2 · binary recording · CSV/metadata export
+  </div>
+
+  <div>
+    <button id="connect">Connect</button>
+    <button id="disconnect" disabled>Disconnect</button>
+
+    <button id="startStream" disabled>▶ Start Streaming</button>
+    <button id="stopStream" disabled>■ Stop Streaming</button>
+
+    <button id="startRec" disabled>● Start Recording</button>
+    <button id="stopRec" disabled>■ Stop Recording</button>
+
+    <button id="dlCsv" disabled>↓ Download CSV</button>
+    <button id="dlBin" disabled>↓ Download Binary</button>
+    <button id="dlMeta" disabled>↓ Download Metadata</button>
+
+    <button id="sync" disabled>↻ Sync Clocks</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="k">CSV rows (total)</div>
+      <div class="v" id="rows">0</div>
+    </div>
+
+    <div class="card">
+      <div class="k">Binary size (approx.)</div>
+      <div class="v" id="binSize">0.00 MB</div>
+    </div>
+
+    <div class="card">
+      <div class="k">Session length</div>
+      <div class="v" id="sessionLength">--</div>
+    </div>
+
+    <div class="card">
+      <div class="k">Session ID</div>
+      <div class="v" id="sessionId">--</div>
+    </div>
+
+    <div class="card">
+      <div class="k">Module ID</div>
+      <div class="v" id="moduleId">--</div>
+    </div>
+
+    <div class="card">
+      <div class="k">Battery</div>
+      <div class="v" id="battery">--</div>
+    </div>
+
+    <div class="card">
+      <div class="k">Measured sample rate</div>
+      <div class="v"><span id="rate">--</span> Hz</div>
+    </div>
+
+    <div class="card">
+      <div class="k">Packets recorded</div>
+      <div class="v" id="packets">0</div>
+    </div>
+
+    <div class="card">
+      <div class="k">Lost packets</div>
+      <div class="v" id="lost">0</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <h3 style="margin-bottom:8px;">Event log</h3>
+  <div id="log"></div>
+
+  <script>
+    "use strict";
+
+    const SERVICE_UUID = "9f000001-8c5a-4e1f-9a7b-3d6e5f0a1b2c";
+    const CMD_CHAR_UUID = "9f000002-8c5a-4e1f-9a7b-3d6e5f0a1b2c";
+    const TIME_CHAR_UUID = "9f000003-8c5a-4e1f-9a7b-3d6e5f0a1b2c";
+    const DATA_CHAR_UUID = "9f000004-8c5a-4e1f-9a7b-3d6e5f0a1b2c";
+    const ID_CHAR_UUID = "9f000005-8c5a-4e1f-9a7b-3d6e5f0a1b2c";
+
+    const BATTERY_SERVICE_UUID = "battery_service";
+    const BATTERY_LEVEL_CHAR_UUID = "battery_level";
+
+    const SAMPLE_RATE_HZ = 200;
+    const SAMPLE_PERIOD_MS = 1000 / SAMPLE_RATE_HZ;
+
+    /* Must match firmware scaling */
+    const ACC_SCALE = 0.000244140625;   /* g per raw count, ±8 g */
+    const GYR_SCALE = 0.030517578125;   /* dps per raw count, ±1000 dps */
+
+    const CSV_HEADER = [
+      "sample_seq",
+      "device_time_ms",
+      "unix_time_ms",
+      "accel_g_x",
+      "accel_g_y",
+      "accel_g_z",
+      "gyro_dps_x",
+      "gyro_dps_y",
+      "gyro_dps_z",
+      "packet_seq",
+      "flags"
+    ].join(",");
+
+    const $ = (id) => document.getElementById(id);
+
+    const connectBtn = $("connect");
+    const disconnectBtn = $("disconnect");
+
+    const startStreamBtn = $("startStream");
+    const stopStreamBtn = $("stopStream");
+
+    const startRecBtn = $("startRec");
+    const stopRecBtn = $("stopRec");
+
+    const dlCsvBtn = $("dlCsv");
+    const dlBinBtn = $("dlBin");
+    const dlMetaBtn = $("dlMeta");
+
+    const syncBtn = $("sync");
+
+    const rowsEl = $("rows");
+    const binSizeEl = $("binSize");
+    const sessionLengthEl = $("sessionLength");
+    const sessionIdEl = $("sessionId");
+    const moduleIdEl = $("moduleId");
+    const batteryEl = $("battery");
+    const rateEl = $("rate");
+    const packetsEl = $("packets");
+    const lostEl = $("lost");
+    const logEl = $("log");
+
+    let device = null;
+    let server = null;
+    let characteristics = {};
+
+    let connected = false;
+    let streaming = false;
+    let recording = false;
+
+    let sessionId = null;
+    let sessionStart = null;
+    let sessionEnd = null;
+
+    let csvChunks = [];
+    let csvPending = [];
+    let csvRowCount = 0;
+
+    let binChunks = [];
+    let binBytes = 0;
+
+    let packetCount = 0;
+    let sampleCount = 0;
+    let lostPackets = 0;
+    let lostSamples = 0;
+
+    let lastPacketSeq = null;
+    let expectedSampleSeq = null;
+
+    let timeSync = null;
+    let lastSyncSent = null;
+
+    let events = [];
+
+    let rateSamples = 0;
+    let rateLast = performance.now();
+    let currentRate = 0;
+
+    function log(msg) {
+      const stamp = new Date().toLocaleTimeString();
+      logEl.textContent = `[${stamp}] ${msg}\n` + logEl.textContent;
+
+      events.push({
+        t: new Date().toISOString(),
+        msg: String(msg)
+      });
+
+      if (events.length > 500) {
+        events.shift();
+      }
+    }
+
+    function updateButtons() {
+      connectBtn.disabled = connected;
+      disconnectBtn.disabled = !connected;
+
+      startStreamBtn.disabled = !connected || streaming;
+      stopStreamBtn.disabled = !connected || !streaming;
+
+      startRecBtn.disabled = !connected || recording;
+      stopRecBtn.disabled = !connected || !recording;
+
+      syncBtn.disabled = !connected;
+
+      dlCsvBtn.disabled = csvRowCount === 0;
+      dlBinBtn.disabled = binBytes === 0;
+      dlMetaBtn.disabled = !sessionId && csvRowCount === 0 && binBytes === 0;
+    }
+
+    function formatDuration(ms) {
+      ms = Math.max(0, Math.floor(ms));
+      const totalSeconds = Math.floor(ms / 1000);
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+
+      if (h > 0) {
+        return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      }
+
+      return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    }
+
+    function makeSessionId() {
+      const d = new Date();
+      const base = d.toISOString().replace(/[:.]/g, "-");
+      const rand = Math.random().toString(16).slice(2, 8);
+      return `${base}-${rand}`;
+    }
+
+    function flushCsvPending() {
+      if (csvPending.length > 0) {
+        csvChunks.push(csvPending.join("\n") + "\n");
+        csvPending = [];
+      }
+    }
+
+    function addCsvLine(arr) {
+      csvPending.push(arr.join(","));
+
+      if (csvPending.length >= 1000) {
+        flushCsvPending();
+      }
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }
+
+    function downloadCsv() {
+      if (csvRowCount === 0) {
+        log("No CSV rows to download.");
+        return;
+      }
+
+      flushCsvPending();
+
+      const blob = new Blob(csvChunks, { type: "text/csv;charset=utf-8" });
+      const name = `${sessionId || "gait_session"}.csv`;
+      downloadBlob(blob, name);
+      log(`CSV download started: ${name}`);
+    }
+
+    function downloadBinary() {
+      if (binBytes === 0) {
+        log("No binary data to download.");
+        return;
+      }
+
+      const blob = new Blob(binChunks, { type: "application/octet-stream" });
+      const name = `${sessionId || "gait_session"}.bin`;
+      downloadBlob(blob, name);
+      log(`Binary download started: ${name}`);
+    }
+
+    function buildMetadata() {
+      flushCsvPending();
+
+      return {
+        app: "Gait IMU Recorder v12 — ESP32C3 + MPU6050",
+        protocol_version: 2,
+        generated: new Date().toISOString(),
+
+        session_id: sessionId,
+        session_start: sessionStart ? new Date(sessionStart).toISOString() : null,
+        session_end: sessionEnd ? new Date(sessionEnd).toISOString() : null,
+        session_length_ms: sessionStart ? ((sessionEnd || Date.now()) - sessionStart) : 0,
+
+        device_name: device ? device.name : null,
+        module_id: moduleIdEl.textContent || null,
+        battery: batteryEl.textContent || null,
+
+        sample_rate_hz: SAMPLE_RATE_HZ,
+        sample_period_ms: SAMPLE_PERIOD_MS,
+
+        scaling: {
+          accel_g_per_count: ACC_SCALE,
+          gyro_dps_per_count: GYR_SCALE,
+          accel_range: "+/-8 g",
+          gyro_range: "+/-1000 dps"
+        },
+
+        binary_format: [
+          "Complete BLE DATA notification packets, little-endian.",
+          "Each packet:",
+          "  uint8 protocol_version = 2",
+          "  uint16 packet_seq",
+          "  uint32 first_sample_seq",
+          "  uint32 first_device_time_ms",
+          "  uint8 sample_count",
+          "  uint8 flags",
+          "  then sample_count * (int16 ax, ay, az, gx, gy, gz)"
+        ].join("\n"),
+
+        csv_columns: CSV_HEADER.split(","),
+
+        stats: {
+          csv_rows: csvRowCount,
+          binary_bytes: binBytes,
+          packets_recorded: packetCount,
+          samples_recorded: sampleCount,
+          lost_packets: lostPackets,
+          lost_samples: lostSamples,
+          measured_rate_hz: Number(currentRate.toFixed(2))
+        },
+
+        time_sync: timeSync,
+
+        events: events.slice(-200)
+      };
+    }
+
+    function downloadMetadata() {
+      const meta = buildMetadata();
+      const blob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
+      const name = `${sessionId || "gait_session"}.meta.json`;
+      downloadBlob(blob, name);
+      log(`Metadata download started: ${name}`);
+    }
+
+    function startRecording() {
+      if (!connected || recording) {
+        return;
+      }
+
+      sessionId = makeSessionId();
+      sessionStart = Date.now();
+      sessionEnd = null;
+
+      csvChunks = [CSV_HEADER + "\n"];
+      csvPending = [];
+      csvRowCount = 0;
+
+      binChunks = [];
+      binBytes = 0;
+
+      packetCount = 0;
+      sampleCount = 0;
+      lostPackets = 0;
+      lostSamples = 0;
+
+      lastPacketSeq = null;
+      expectedSampleSeq = null;
+
+      recording = true;
+
+      log(`Recording started. Session ID: ${sessionId}`);
+      updateButtons();
+    }
+
+    function stopRecording() {
+      if (!recording) {
+        return;
+      }
+
+      recording = false;
+      sessionEnd = Date.now();
+      flushCsvPending();
+
+      log(
+        `Recording stopped. Rows=${csvRowCount}, ` +
+        `binary=${(binBytes / 1048576).toFixed(2)} MB, ` +
+        `packets=${packetCount}`
+      );
+
+      updateButtons();
+    }
+
+    async function sendCmd(bytes) {
+      if (!connected || !characteristics.cmd) {
+        return false;
+      }
+
+      try {
+        await characteristics.cmd.writeValue(new Uint8Array(bytes));
+        return true;
+      } catch (err) {
+        log(`CMD write failed: ${err}`);
+        return false;
+      }
+    }
+
+    async function startStreaming() {
+      if (!connected) {
+        return;
+      }
+
+      lastPacketSeq = null;
+      expectedSampleSeq = null;
+
+      const ok = await sendCmd([0x01]);
+      if (ok) {
+        streaming = true;
+        log("Start streaming command sent.");
+      }
+
+      updateButtons();
+    }
+
+    async function stopStreaming() {
+      if (!connected) {
+        return;
+      }
+
+      const ok = await sendCmd([0x02]);
+      if (ok) {
+        streaming = false;
+        log("Stop streaming command sent.");
+      }
+
+      updateButtons();
+    }
+
+    async function syncClocks() {
+      if (!connected || !characteristics.time) {
+        return;
+      }
+
+      const now = Date.now();
+      const sec = Math.floor(now / 1000);
+      const ms = now % 1000;
+
+      lastSyncSent = {
+        unixMs: now,
+        perf: performance.now()
+      };
+
+      const buf = new ArrayBuffer(6);
+      const dv = new DataView(buf);
+
+      dv.setUint32(0, sec, true);
+      dv.setUint16(4, ms, true);
+
+      try {
+        await characteristics.time.writeValue(buf);
+        log(`Time sync sent: ${new Date(now).toISOString()}`);
+      } catch (err) {
+        log(`Time sync write failed: ${err}`);
+      }
+    }
+
+    function delta32(a, b) {
+      let d = (a - b) >>> 0;
+      if (d >= 0x80000000) {
+        d -= 0x100000000;
+      }
+      return d;
+    }
+
+    function deviceToUnix(deviceMs) {
+      if (!timeSync) {
+        return null;
+      }
+
+      return timeSync.unixMs + delta32(deviceMs, timeSync.deviceMs);
+    }
+
+    function onTimeAck(event) {
+      const dv = event.target.value;
+
+      if (!dv || dv.byteLength < 8) {
+        return;
+      }
+
+      const deviceMs = dv.getUint32(0, true);
+      const unixLow = dv.getUint32(4, true);
+
+      const rtt = lastSyncSent ? (performance.now() - lastSyncSent.perf) : 0;
+      const sentUnix = lastSyncSent ? lastSyncSent.unixMs : Date.now();
+
+      const U32 = 0x100000000;
+
+      let unixMs = Math.floor(sentUnix / U32) * U32 + unixLow;
+
+      /* Correct possible 32-bit boundary crossing */
+      if (unixMs < sentUnix - 0x80000000) {
+        unixMs += U32;
+      }
+
+      if (unixMs > sentUnix + 0x80000000) {
+        unixMs -= U32;
+      }
+
+      /* Rough one-way latency compensation */
+      unixMs += Math.round(rtt / 2);
+
+      timeSync = {
+        deviceMs: deviceMs,
+        unixMs: unixMs,
+        rttMs: Math.round(rtt),
+        createdAt: new Date().toISOString()
+      };
+
+      log(`Time ACK: device_ms=${deviceMs}, unix_ms=${unixMs}, RTT=${Math.round(rtt)} ms`);
+    }
+
+    function onData(event) {
+      const dv = event.target.value;
+
+      if (!dv || dv.byteLength < 13) {
+        return;
+      }
+
+      const version = dv.getUint8(0);
+      if (version !== 2) {
+        return;
+      }
+
+      const pktSeq = dv.getUint16(1, true);
+      const firstSampleSeq = dv.getUint32(3, true);
+      const firstDeviceMs = dv.getUint32(7, true);
+      const count = dv.getUint8(11);
+      const flags = dv.getUint8(12);
+
+      if (count === 0) {
+        return;
+      }
+
+      const expectedLen = 13 + count * 12;
+
+      if (dv.byteLength < expectedLen) {
+        log(`Short DATA packet: got ${dv.byteLength}, expected ${expectedLen}`);
+        return;
+      }
+
+      rateSamples += count;
+
+      /* Packet loss detection */
+      if (lastPacketSeq !== null) {
+        const expectedPkt = (lastPacketSeq + 1) & 0xFFFF;
+
+        if (pktSeq !== expectedPkt) {
+          const missing = (pktSeq - expectedPkt) & 0xFFFF;
+
+          if (missing > 0 && missing < 0x8000) {
+            lostPackets += missing;
+          }
+        }
+      }
+
+      lastPacketSeq = pktSeq;
+
+      /* Sample sequence loss detection */
+      if (expectedSampleSeq !== null) {
+        const missingSamples = (firstSampleSeq - expectedSampleSeq) >>> 0;
+
+        if (missingSamples > 0 && missingSamples < 0x80000000) {
+          lostSamples += missingSamples;
+        }
+      }
+
+      expectedSampleSeq = (firstSampleSeq + count) >>> 0;
+
+      if (!recording) {
+        return;
+      }
+
+      packetCount++;
+      sampleCount += count;
+
+      /*
+         Save complete BLE DATA packet exactly as received.
+         This keeps packet header, sequence, timestamp, flags, and samples.
+      */
+      const packetBytes = new Uint8Array(
+        dv.buffer,
+        dv.byteOffset,
+        dv.byteLength
+      ).slice();
+
+      binChunks.push(packetBytes);
+      binBytes += packetBytes.byteLength;
+
+      for (let i = 0; i < count; i++) {
+        const off = 13 + i * 12;
+
+        const ax = dv.getInt16(off + 0, true);
+        const ay = dv.getInt16(off + 2, true);
+        const az = dv.getInt16(off + 4, true);
+
+        const gx = dv.getInt16(off + 6, true);
+        const gy = dv.getInt16(off + 8, true);
+        const gz = dv.getInt16(off + 10, true);
+
+        const seq = (firstSampleSeq + i) >>> 0;
+        const deviceMs = (firstDeviceMs + i * SAMPLE_PERIOD_MS) >>> 0;
+        const unixMs = deviceToUnix(deviceMs);
+
+        addCsvLine([
+          seq,
+          deviceMs,
+          unixMs === null ? "" : Math.round(unixMs),
+          (ax * ACC_SCALE).toFixed(6),
+          (ay * ACC_SCALE).toFixed(6),
+          (az * ACC_SCALE).toFixed(6),
+          (gx * GYR_SCALE).toFixed(4),
+          (gy * GYR_SCALE).toFixed(4),
+          (gz * GYR_SCALE).toFixed(4),
+          pktSeq,
+          flags
+        ]);
+
+        csvRowCount++;
+      }
+    }
+
+    function onDisconnected() {
+      if (recording) {
+        recording = false;
+        sessionEnd = Date.now();
+        flushCsvPending();
+      }
+
+      connected = false;
+      streaming = false;
+
+      server = null;
+      characteristics = {};
+
+      lastPacketSeq = null;
+      expectedSampleSeq = null;
+
+      log("BLE disconnected.");
+      updateButtons();
+    }
+
+    async function connect() {
+      if (!navigator.bluetooth) {
+        log("Web Bluetooth is not available in this browser.");
+        return;
+      }
+
+      if (!window.isSecureContext) {
+        log("Warning: Web Bluetooth requires HTTPS or localhost.");
+      }
+
+      try {
+        device = await navigator.bluetooth.requestDevice({
+          filters: [
+            { services: [SERVICE_UUID] }
+          ],
+          optionalServices: [BATTERY_SERVICE_UUID]
+        });
+
+        device.addEventListener("gattserverdisconnected", onDisconnected);
+
+        server = await device.gatt.connect();
+
+        const service = await server.getPrimaryService(SERVICE_UUID);
+
+        characteristics.cmd = await service.getCharacteristic(CMD_CHAR_UUID);
+        characteristics.time = await service.getCharacteristic(TIME_CHAR_UUID);
+        characteristics.data = await service.getCharacteristic(DATA_CHAR_UUID);
+        characteristics.id = await service.getCharacteristic(ID_CHAR_UUID);
+
+        await characteristics.data.startNotifications();
+        characteristics.data.addEventListener("characteristicvaluechanged", onData);
+
+        await characteristics.time.startNotifications();
+        characteristics.time.addEventListener("characteristicvaluechanged", onTimeAck);
+
+        try {
+          const idValue = await characteristics.id.readValue();
+          const txt = new TextDecoder().decode(idValue);
+          moduleIdEl.textContent = txt;
+        } catch (err) {
+          moduleIdEl.textContent = "--";
+        }
+
+        try {
+          const battService = await server.getPrimaryService(BATTERY_SERVICE_UUID);
+          const battLevel = await battService.getCharacteristic(BATTERY_LEVEL_CHAR_UUID);
+
+          const updateBattery = (value) => {
+            if (value && value.byteLength >= 1) {
+              batteryEl.textContent = `${value.getUint8(0)} %`;
+            }
+          };
+
+          const initial = await battLevel.readValue();
+          updateBattery(initial);
+
+          await battLevel.startNotifications();
+          battLevel.addEventListener("characteristicvaluechanged", (e) => {
+            updateBattery(e.target.value);
+          });
+        } catch (err) {
+          batteryEl.textContent = "n/a";
+        }
+
+        connected = true;
+        streaming = false;
+        recording = false;
+
+        lastPacketSeq = null;
+        expectedSampleSeq = null;
+
+        log(`Connected to ${device.name || "device"}.`);
+        updateButtons();
+
+      } catch (err) {
+        log(`Connect failed: ${err}`);
+      }
+    }
+
+    function disconnect() {
+      if (device && device.gatt.connected) {
+        device.gatt.disconnect();
+      }
+    }
+
+    connectBtn.addEventListener("click", connect);
+    disconnectBtn.addEventListener("click", disconnect);
+
+    startStreamBtn.addEventListener("click", startStreaming);
+    stopStreamBtn.addEventListener("click", stopStreaming);
+
+    startRecBtn.addEventListener("click", startRecording);
+    stopRecBtn.addEventListener("click", stopRecording);
+
+    dlCsvBtn.addEventListener("click", downloadCsv);
+    dlBinBtn.addEventListener("click", downloadBinary);
+    dlMetaBtn.addEventListener("click", downloadMetadata);
+
+    syncBtn.addEventListener("click", syncClocks);
+
+    setInterval(() => {
+      const now = performance.now();
+      const dt = (now - rateLast) / 1000;
+
+      if (dt > 0) {
+        currentRate = rateSamples / dt;
+        rateSamples = 0;
+        rateLast = now;
+      }
+
+      rowsEl.textContent = csvRowCount;
+      binSizeEl.textContent = `${(binBytes / 1048576).toFixed(2)} MB`;
+
+      if (sessionStart) {
+        const end = sessionEnd || Date.now();
+        sessionLengthEl.textContent = formatDuration(end - sessionStart);
+      } else {
+        sessionLengthEl.textContent = "--";
+      }
+
+      sessionIdEl.textContent = sessionId || "--";
+      packetsEl.textContent = packetCount;
+      lostEl.textContent = lostPackets;
+      rateEl.textContent = connected ? currentRate.toFixed(1) : "--";
+
+      updateButtons();
+    }, 500);
+
+    updateButtons();
+
+    if (!window.isSecureContext) {
+      log("Warning: Web Bluetooth requires HTTPS or localhost.");
+    }
+
+    if (!navigator.bluetooth) {
+      log("Web Bluetooth unavailable. Use Chrome/Edge over HTTPS or localhost.");
+    }
+  </script>
+</body>
+</html>
